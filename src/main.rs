@@ -5,6 +5,7 @@ use arbitrum_claim::{
     wait_gas, Balances, Config, ProviderError, TokenDistributor, DISTRIBUTOR_ADDRESS,
 };
 use ethers::{prelude::*, utils::format_units};
+use futures::future::join_all;
 use log::{error, info, LevelFilter};
 
 #[tokio::main]
@@ -107,9 +108,8 @@ async fn main() -> Result<(), ProviderError> {
     // Отправка всех транзакций
     let threads = send_transactions(provider.clone(), transactions).await;
 
-    for thread in threads {
-        thread.await.unwrap();
-    }
+    // Ожидание завершения
+    join_all(threads).await;
 
     info!("Программа завершила работу!");
 
