@@ -15,6 +15,7 @@
 ## Конфигурация
 
 ```yaml
+rpc: https://arb1.arbitrum.io/rpc # Адрес RPC
 secrets-path: secrets.txt # Путь к приватным ключам/мнемонике
 receiver: 0x0000..dEaD # адрес-получатель
 gas-limit: 3000000

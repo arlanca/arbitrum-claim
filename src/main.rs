@@ -1,8 +1,8 @@
-use std::{ops::Add, sync::Arc};
+use std::{borrow::Borrow, ops::Add, sync::Arc};
 
 use arbitrum_claim::{
-    build_transactions, fetch_balances, read_secrets_file, Balances, Config, ProviderError,
-    TokenDistributor, DISTRIBUTOR_ADDRESS,
+    build_estimate_tx, build_transactions, fetch_balances, read_secrets_file, send_transactions,
+    wait_gas, Balances, Config, ProviderError, TokenDistributor, DISTRIBUTOR_ADDRESS,
 };
 use ethers::{prelude::*, utils::format_units};
 use log::{error, info, LevelFilter};
@@ -75,10 +75,43 @@ async fn main() -> Result<(), ProviderError> {
 
     info!("Тотал баланс: {}", format_units(acc_balance, "ether")?);
 
-    let claim_params = config.claim_params();
+    // Первоначальное создание транзакций для экономии времни
+    let mut claim_params = config.claim_params();
 
-    let _transactions =
+    let mut transactions =
         build_transactions(provider.clone(), &signers, &balances, &claim_params).await;
+
+    // Билд транзакции для проверки доступности клейма
+    let estimate_signer = {
+        let signer = balances
+            .borrow()
+            .iter()
+            .find(|(_, &balance)| balance > U256::from(0));
+        if let None = signer {
+            error!("Нет ни одного кошелька для клейма!");
+            return Ok(());
+        }
+
+        signer.unwrap().0.clone()
+    };
+    let estimate_tx = build_estimate_tx(estimate_signer);
+
+    // Ожидание доступности клейма
+    let gas = wait_gas(provider.clone(), estimate_tx.clone()).await;
+    if gas > claim_params.gas_limit {
+        claim_params.gas_limit = gas;
+        transactions =
+            build_transactions(provider.clone(), &signers, &balances, &claim_params).await;
+    }
+
+    // Отправка всех транзакций
+    let threads = send_transactions(provider.clone(), transactions).await;
+
+    for thread in threads {
+        thread.await.unwrap();
+    }
+
+    info!("Программа завершила работу!");
 
     Ok(())
 }

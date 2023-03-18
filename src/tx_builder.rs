@@ -18,7 +18,7 @@ pub type Balances = HashMap<H160, U256>;
 pub struct ClaimParams {
     pub receiver: H160,
     pub gas_bid: U256,
-    pub gas_limit: u64,
+    pub gas_limit: U256,
 }
 
 async fn sign_transaction(signer: &Wallet<SigningKey>, tx: TypedTransaction) -> Bytes {
@@ -81,4 +81,15 @@ pub async fn build_transactions<T: Middleware>(
     }
 
     transactions
+}
+
+pub fn build_estimate_tx(from: H160) -> TypedTransaction {
+    let claim_input = AbiEncode::encode(ClaimCall);
+
+    let claim_tx_request = TransactionRequest::new()
+        .from(from)
+        .to(DISTRIBUTOR_ADDRESS.clone())
+        .data(claim_input.clone());
+
+    TypedTransaction::Legacy(claim_tx_request)
 }
