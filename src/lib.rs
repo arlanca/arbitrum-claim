@@ -10,5 +10,5 @@ pub use constants::*;
 pub use contracts::{ClaimCall, TokenDistributor, TransferCall};
 pub use errors::*;
 pub use tx_builder::{build_estimate_tx, build_transactions, Balances, ClaimParams};
-pub use utils::{fetch_balances, send_transactions, wait_gas};
+pub use utils::{fetch_balances, send_transactions, wait_gas, get_nonce_loop};
 pub use wallets::read_secrets_file;

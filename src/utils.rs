@@ -4,7 +4,7 @@ use ethers::{
     prelude::k256::ecdsa::SigningKey,
     providers::{Middleware, MiddlewareError},
     signers::{Signer, Wallet},
-    types::{transaction::eip2718::TypedTransaction, Bytes, U256},
+    types::{transaction::eip2718::TypedTransaction, Address, Bytes, U256},
 };
 use futures::future::join_all;
 use log::{error, info, warn};
@@ -37,6 +37,7 @@ pub async fn fetch_balances<T: Middleware + 'static>(
 pub async fn wait_gas<T: Middleware>(provider: Arc<T>, tx: TypedTransaction) -> U256 {
     loop {
         let gas = provider.estimate_gas(&tx, None).await;
+
         if let Ok(gas) = gas {
             return gas;
         }
@@ -44,12 +45,29 @@ pub async fn wait_gas<T: Middleware>(provider: Arc<T>, tx: TypedTransaction) -> 
         let err = {
             let gas_err = gas.unwrap_err();
 
-            let json_rpc_err = gas_err.as_error_response().unwrap();
-
-            json_rpc_err.message.clone()
+            gas_err.to_string()
         };
 
         warn!("Клейм пока не доступен. Ошибка: {}", err);
+        sleep(Duration::from_secs_f64(0.1));
+    }
+}
+
+pub async fn get_nonce_loop<T: Middleware>(provider: &Arc<T>, address: Address) -> U256 {
+    loop {
+        let nonce = provider.get_transaction_count(address, None).await;
+
+        if let Ok(nonce) = nonce {
+            return nonce;
+        };
+
+        let err = {
+            let nonce_err = nonce.unwrap_err();
+
+            nonce_err.to_string()
+        };
+
+        warn!("Не удалось получить nonce. Ошибка: {}", err);
         sleep(Duration::from_secs_f64(0.1));
     }
 }
