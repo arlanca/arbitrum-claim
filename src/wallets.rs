@@ -25,7 +25,7 @@ pub fn read_secrets_file(path: &str) -> Result<Wallets, WalletError> {
     let content = std::fs::read_to_string(path)?;
 
     let wallets = content
-        .split("\n")
+        .split('\n')
         .filter_map(|line| {
             let line = line.trim();
             let wallet: Result<Wallet<SigningKey>, _> = if line.len() > 64 {

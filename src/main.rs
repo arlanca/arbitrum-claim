@@ -64,7 +64,7 @@ async fn main() -> Result<(), ProviderError> {
 
     info!("Всего кошельков: {}", signers.len());
 
-    let token_distrubitor = TokenDistributor::new(DISTRIBUTOR_ADDRESS.clone(), provider.clone());
+    let token_distrubitor = TokenDistributor::new(*DISTRIBUTOR_ADDRESS, provider.clone());
 
     // hashmap с балансами всех юзеров для уменьшения запросов после клейма
     let balances: Balances = fetch_balances(&token_distrubitor, &signers).await;
@@ -88,12 +88,12 @@ async fn main() -> Result<(), ProviderError> {
             .borrow()
             .iter()
             .find(|(_, &balance)| balance > U256::from(0));
-        if let None = signer {
+        if signer.is_none() {
             error!("Нет ни одного кошелька для клейма!");
             return Ok(());
         }
 
-        signer.unwrap().0.clone()
+        *signer.unwrap().0
     };
     let estimate_tx = build_estimate_tx(estimate_signer);
 

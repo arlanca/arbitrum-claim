@@ -7,7 +7,7 @@ use ethers::{
     signers::{Signer, Wallet},
     types::{transaction::eip2718::TypedTransaction, Bytes, TransactionRequest, H160, U256},
 };
-use log::warn;
+
 
 use crate::{get_nonce_loop, ClaimCall, TransferCall, ARB_ADDRESS, DISTRIBUTOR_ADDRESS};
 
@@ -54,7 +54,7 @@ pub async fn build_transactions<T: Middleware>(
 
         let claim_tx_request = TransactionRequest::new()
             .from(signer.address())
-            .to(DISTRIBUTOR_ADDRESS.clone())
+            .to(*DISTRIBUTOR_ADDRESS)
             .data(claim_input.clone())
             .gas(params.gas_limit)
             .gas_price(params.gas_bid)
@@ -62,7 +62,7 @@ pub async fn build_transactions<T: Middleware>(
 
         let transfer_tx_request = TransactionRequest::new()
             .from(signer.address())
-            .to(ARB_ADDRESS.clone())
+            .to(*ARB_ADDRESS)
             .data(get_transfer_input(params.receiver, *balance))
             .gas(params.gas_limit)
             .gas_price(params.gas_bid)
@@ -83,8 +83,8 @@ pub fn build_estimate_tx(from: H160) -> TypedTransaction {
 
     let claim_tx_request = TransactionRequest::new()
         .from(from)
-        .to(DISTRIBUTOR_ADDRESS.clone())
-        .data(claim_input.clone());
+        .to(*DISTRIBUTOR_ADDRESS)
+        .data(claim_input);
 
     TypedTransaction::Legacy(claim_tx_request)
 }

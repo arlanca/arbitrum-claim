@@ -28,7 +28,7 @@ pub async fn fetch_balances<T: Middleware + 'static>(
     let balances: Balances = join_all(future)
         .await
         .into_iter()
-        .filter_map(|p| p)
+        .flatten()
         .collect::<HashMap<_, U256>>();
 
     balances
@@ -45,7 +45,9 @@ pub async fn wait_gas<T: Middleware>(provider: Arc<T>, tx: TypedTransaction) -> 
         let err = {
             let gas_err = gas.unwrap_err();
 
-            gas_err.to_string()
+            let json_rpc_err = gas_err.as_error_response().unwrap();
+
+             json_rpc_err.message.clone()
         };
 
         warn!("Клейм пока не доступен. Ошибка: {}", err);
@@ -64,7 +66,9 @@ pub async fn get_nonce_loop<T: Middleware>(provider: &Arc<T>, address: Address) 
         let err = {
             let nonce_err = nonce.unwrap_err();
 
-            nonce_err.to_string()
+            let json_rpc_err = nonce_err.as_error_response().unwrap();
+
+             json_rpc_err.message.clone()
         };
 
         warn!("Не удалось получить nonce. Ошибка: {}", err);
@@ -95,7 +99,7 @@ pub async fn send_transactions<T: Middleware + 'static>(
                 };
 
                 let tx = tx.unwrap();
-                if let None = tx {
+                if tx.is_none() {
                     error!("Транзакция не завершилась успехом");
                     return;
                 };

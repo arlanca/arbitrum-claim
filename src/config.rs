@@ -37,9 +37,9 @@ impl Config {
 
     pub fn claim_params(&self) -> ClaimParams {
         ClaimParams {
-            receiver: self.receiver.clone(),
+            receiver: self.receiver,
             gas_limit: U256::from(self.gas_limit),
-            gas_bid: self.gas_bid.clone(),
+            gas_bid: self.gas_bid,
         }
     }
 }
