@@ -9,7 +9,7 @@ use ethers::{
 };
 use log::warn;
 
-use crate::{ClaimCall, TransferCall, ARB_ADDRESS, DISTRIBUTOR_ADDRESS};
+use crate::{get_nonce_loop, ClaimCall, TransferCall, ARB_ADDRESS, DISTRIBUTOR_ADDRESS};
 
 pub type Transactions = Vec<Bytes>;
 pub type Balances = HashMap<H160, U256>;
@@ -44,12 +44,7 @@ pub async fn build_transactions<T: Middleware>(
     let claim_input = AbiEncode::encode(ClaimCall);
 
     for signer in signers {
-        let mut nonce = provider.get_transaction_count(signer.address(), None).await;
-        while let Err(err) = nonce {
-            warn!("Не удалось получить nonce: {}", err);
-            nonce = provider.get_transaction_count(signer.address(), None).await;
-        }
-        let nonce = nonce.unwrap();
+        let nonce = get_nonce_loop(&provider, signer.address()).await;
 
         let balance = balances.get(&signer.address());
         if balance.is_none() {
