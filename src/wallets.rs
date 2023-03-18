@@ -1,17 +1,13 @@
 use std::str::FromStr;
 
-use ethers::{prelude::k256::ecdsa::SigningKey, signers::{Wallet, MnemonicBuilder, coins_bip39::English}};
-use thiserror::Error;
+use ethers::{
+    prelude::k256::ecdsa::SigningKey,
+    signers::{coins_bip39::English, MnemonicBuilder, Wallet},
+};
+
+use crate::WalletError;
 
 pub(crate) type Wallets = Vec<Wallet<SigningKey>>;
-
-#[derive(Error, Debug)]
-pub enum WalletError {
-    #[error("invalid credentials")]
-    InvalidCredentials(#[from] ethers::signers::WalletError),
-    #[error("unknown file")]
-    UnknownFile(#[from] std::io::Error),
-}
 
 fn from_mnemonic(raw: &str) -> Result<Wallet<SigningKey>, WalletError> {
     MnemonicBuilder::<English>::default()
