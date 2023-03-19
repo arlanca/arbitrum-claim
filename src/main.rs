@@ -79,9 +79,11 @@ async fn main() -> Result<(), ProviderError> {
     // Первоначальное создание транзакций для экономии времни
     let mut claim_params = config.claim_params();
 
+    info!("Сборка транзакций...");
     let mut transactions =
         build_transactions(provider.clone(), &signers, &balances, &claim_params).await;
 
+    info!("Всего кошельков с балансами: {}", transactions.len() / 2);
     // Билд транзакции для проверки доступности клейма
     let estimate_signer = {
         let signer = balances
