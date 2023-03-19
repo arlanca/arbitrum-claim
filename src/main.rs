@@ -47,8 +47,8 @@ async fn main() -> Result<(), ProviderError> {
         chain_id?
     };
 
-    let wallets = {
-        let wallets = read_secrets_file(&config.secrets_path);
+    let (wallets, receivers) = {
+        let wallets = read_secrets_file(&config.secrets_path, config.receiver);
         if let Err(err) = wallets {
             error!("Не удалось прочитать файл: {:?}", err);
             return Ok(());
@@ -80,8 +80,14 @@ async fn main() -> Result<(), ProviderError> {
     let mut claim_params = config.claim_params();
 
     info!("Сборка транзакций...");
-    let mut transactions =
-        build_transactions(provider.clone(), &signers, &balances, &claim_params).await;
+    let mut transactions = build_transactions(
+        provider.clone(),
+        &signers,
+        &balances,
+        &receivers,
+        &claim_params,
+    )
+    .await;
 
     info!("Всего кошельков с балансами: {}", transactions.len() / 2);
     // Билд транзакции для проверки доступности клейма
@@ -103,8 +109,14 @@ async fn main() -> Result<(), ProviderError> {
     let gas = wait_gas(provider.clone(), estimate_tx.clone()).await;
     if gas > claim_params.gas_limit {
         claim_params.gas_limit = gas;
-        transactions =
-            build_transactions(provider.clone(), &signers, &balances, &claim_params).await;
+        transactions = build_transactions(
+            provider.clone(),
+            &signers,
+            &balances,
+            &receivers,
+            &claim_params,
+        )
+        .await;
     }
 
     // Отправка всех транзакций

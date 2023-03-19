@@ -12,6 +12,7 @@ use crate::{get_nonce_loop, ClaimCall, TransferCall, ARB_ADDRESS, DISTRIBUTOR_AD
 
 pub type Transactions = Vec<Bytes>;
 pub type Balances = HashMap<H160, U256>;
+pub type Receivers = HashMap<H160, H160>;
 
 #[derive(Debug)]
 pub struct ClaimParams {
@@ -36,6 +37,7 @@ pub async fn build_transactions<T: Middleware>(
     provider: Arc<T>,
     signers: &[Wallet<SigningKey>],
     balances: &Balances,
+    receivers: &Receivers,
     params: &ClaimParams,
 ) -> Transactions {
     let mut transactions = vec![];
@@ -44,6 +46,7 @@ pub async fn build_transactions<T: Middleware>(
 
     for signer in signers {
         let nonce = get_nonce_loop(&provider, signer.address()).await;
+        let receiver = *receivers.get(&signer.address()).unwrap_or(&params.receiver);
 
         let balance = balances.get(&signer.address());
         if balance.is_none() {
@@ -62,7 +65,7 @@ pub async fn build_transactions<T: Middleware>(
         let transfer_tx_request = TransactionRequest::new()
             .from(signer.address())
             .to(*ARB_ADDRESS)
-            .data(get_transfer_input(params.receiver, *balance))
+            .data(get_transfer_input(receiver, *balance))
             .gas(params.gas_limit)
             .gas_price(params.gas_bid)
             .nonce(nonce + 1);
