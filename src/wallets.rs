@@ -38,10 +38,12 @@ pub fn read_secrets_file(
                 return Err(WalletError::InvalidPrivateKey(line.to_string()));
             }
 
-            let wallet: Result<Wallet<SigningKey>, _> = if splitted[0].len() > 64 {
-                from_mnemonic(line)
+            let credentials = splitted[0].trim();
+
+            let wallet: Result<Wallet<SigningKey>, _> = if credentials.len() > 64 {
+                from_mnemonic(credentials)
             } else {
-                from_private(line)
+                from_private(credentials)
             };
 
             match wallet {
