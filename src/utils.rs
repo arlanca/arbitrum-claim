@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, thread::sleep, time::Duration};
+use std::{sync::Arc, thread::sleep, time::Duration};
 
 use ethers::{
     prelude::k256::ecdsa::SigningKey,
@@ -10,28 +10,29 @@ use futures::future::join_all;
 use log::{error, info, warn};
 use tokio::task::JoinHandle;
 
-use crate::{Balances, TokenDistributor};
+use crate::TokenDistributor;
 
-pub async fn fetch_balances<T: Middleware + 'static>(
+pub async fn get_wallets_with_balances<T: Middleware + 'static>(
     token_distributor: &TokenDistributor<T>,
-    signers: &[Wallet<SigningKey>],
-) -> Balances {
-    let future = signers.iter().map(|wallet| async {
-        let balance = token_distributor.claimable_tokens(wallet.address()).await;
-        if balance.is_err() {
-            warn!("Не удалось получить баланс кошелька: {}", wallet.address());
-            return None;
-        }
-        Some((wallet.address(), balance.unwrap()))
+    wallets: &[Wallet<SigningKey>],
+) -> Vec<(Wallet<SigningKey>, U256)> {
+    let futures = wallets.iter().map(|wallet| async move {
+        let balance: U256 = match token_distributor.claimable_tokens(wallet.address()).await {
+            Ok(balance) => balance,
+            Err(_) => {
+                warn!("Не удалось получить баланс кошелька: {}", wallet.address());
+                return None;
+            }
+        };
+
+        Some((wallet.clone(), balance))
     });
 
-    let balances: Balances = join_all(future)
+    join_all(futures)
         .await
         .into_iter()
         .flatten()
-        .collect::<HashMap<_, U256>>();
-
-    balances
+        .collect::<Vec<_>>()
 }
 
 pub async fn wait_gas<T: Middleware>(provider: Arc<T>, tx: TypedTransaction) -> U256 {
@@ -113,9 +114,7 @@ pub async fn send_transactions<T: Middleware + 'static>(
         .map(|tx| {
             let provider = provider.clone();
 
-            tokio::spawn(async move {
-                send_transaction(provider, tx).await;
-            })
+            tokio::spawn(send_transaction(provider, tx))
         })
         .collect::<Vec<JoinHandle<()>>>()
 }

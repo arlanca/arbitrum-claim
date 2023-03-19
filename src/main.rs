@@ -1,8 +1,9 @@
-use std::{borrow::Borrow, ops::Add, sync::Arc};
+use std::{ops::Add, sync::Arc};
 
 use arbitrum_claim::{
-    build_estimate_tx, build_transactions, fetch_balances, read_secrets_file, send_transactions,
-    wait_gas, Balances, Config, ProviderError, TokenDistributor, DISTRIBUTOR_ADDRESS,
+    build_estimate_tx, build_transactions, get_wallets_with_balances, read_secrets_file,
+    send_transactions, wait_gas, Config, ProviderError, TokenDistributor, TransactionInfo,
+    DISTRIBUTOR_ADDRESS,
 };
 use ethers::{prelude::*, utils::format_units};
 use futures::future::join_all;
@@ -14,113 +15,113 @@ async fn main() -> Result<(), ProviderError> {
         .filter_level(LevelFilter::Info)
         .init();
 
-    // Чтение конфига из файла
-    let config = {
-        let config = Config::from_file("config.yaml");
-        if let Err(err) = config {
+    // Чтение конфига
+    let config = match Config::from_file("config.yaml") {
+        Ok(config) => config,
+        Err(err) => {
             error!("Не удалось прочитать конфиг. Ошибка: {}", err);
             return Ok(());
         }
-
-        config?
     };
 
     // Подключение к RPC
-    let provider = {
-        let provider = Provider::<Http>::try_from(&config.rpc);
-        if let Err(err) = provider {
+    let provider = match Provider::<Http>::try_from(&config.rpc) {
+        Ok(provider) => Arc::new(provider),
+        Err(err) => {
             error!("Не удалось подключиться к RPC: {:?}", err);
             return Ok(());
         }
-
-        Arc::new(provider?)
     };
 
-    // Первоначальная проверка работоспособности ноды + получение chainId для signer
-    let chain_id = {
-        let chain_id = provider.get_chainid().await;
-        if let Err(err) = chain_id {
+    // Проверка ноды и получение chain_id
+    let chain_id = match provider.get_chainid().await {
+        Ok(chain_id) => chain_id,
+        Err(err) => {
             error!("Не удалось проверить RPC: {:?}", err);
             return Ok(());
         }
-
-        chain_id?
     };
 
-    let (wallets, receivers) = {
-        let wallets = read_secrets_file(&config.secrets_path, config.receiver);
-        if let Err(err) = wallets {
-            error!("Не удалось прочитать файл: {:?}", err);
+    // Получение секретов
+    let (wallets, receivers) = match read_secrets_file(&config.secrets_path, config.receiver) {
+        Ok((wallets, receivers)) => (wallets, receivers),
+        Err(err) => {
+            error!("Не удалось прочитать секреты: {:?}", err);
             return Ok(());
         }
-
-        wallets?
     };
 
-    let signers = wallets
-        .into_iter()
-        .map(|wallet| wallet.with_chain_id(chain_id.as_u64()))
-        .collect::<Vec<Wallet<_>>>();
+    info!("Количество кошельков: {}", wallets.len());
 
-    info!("Всего кошельков: {}", signers.len());
-
-    let token_distrubitor = TokenDistributor::new(*DISTRIBUTOR_ADDRESS, provider.clone());
-
-    // hashmap с балансами всех юзеров для уменьшения запросов после клейма
-    let balances: Balances = fetch_balances(&token_distrubitor, &signers).await;
-
-    // аккумулирование балансов
-    let acc_balance = balances
-        .values()
-        .fold(U256::from(0), |acc: U256, balance: &U256| acc.add(balance));
-
-    info!("Тотал баланс: {}", format_units(acc_balance, "ether")?);
-
-    // Первоначальное создание транзакций для экономии времни
-    let mut claim_params = config.claim_params();
-
-    info!("Сборка транзакций...");
-    let mut transactions = build_transactions(
-        provider.clone(),
-        &signers,
-        &balances,
-        &receivers,
-        &claim_params,
+    // Получение кошельков с балансами
+    let wallets_with_balances = get_wallets_with_balances(
+        &TokenDistributor::new(*DISTRIBUTOR_ADDRESS, provider.clone()),
+        &wallets,
     )
     .await;
 
-    info!("Всего кошельков с балансами: {}", transactions.len() / 2);
-    // Билд транзакции для проверки доступности клейма
-    let estimate_signer = {
-        let signer = balances
-            .borrow()
-            .iter()
-            .find(|(_, &balance)| balance > U256::from(0));
-        if signer.is_none() {
+    // Получение общего баланса
+    let total_balance = wallets_with_balances
+        .iter()
+        .fold(U256::from(0), |total: U256, (_, balance)| {
+            total.add(balance)
+        });
+
+    info!("Общий баланс: {}", format_units(total_balance, "ether")?);
+
+    // Создание массива из TransactionInfo
+    let transactions_infos = wallets_with_balances
+        .into_iter()
+        .map(|(wallet, balance)| match receivers.get(&wallet.address()) {
+            Some(&receiver) => TransactionInfo {
+                wallet,
+                balance,
+                receiver,
+            },
+            None => TransactionInfo {
+                wallet,
+                balance,
+                receiver: config.receiver,
+            },
+        })
+        .collect::<Vec<_>>();
+
+    // Получение первого элемента из массива TransactionInfo
+    let transaction_info = match transactions_infos.first() {
+        Some(transaction_info) => transaction_info,
+        None => {
             error!("Нет ни одного кошелька для клейма!");
             return Ok(());
         }
-
-        *signer.unwrap().0
     };
-    let estimate_tx = build_estimate_tx(estimate_signer);
 
-    // Ожидание доступности клейма
-    let gas = wait_gas(provider.clone(), estimate_tx.clone()).await;
-    if gas > claim_params.gas_limit {
-        claim_params.gas_limit = gas;
-        transactions = build_transactions(
-            provider.clone(),
-            &signers,
-            &balances,
-            &receivers,
-            &claim_params,
-        )
-        .await;
-    }
+    info!("Кошельков с балансом: {}", transactions_infos.len());
 
-    // Отправка всех транзакций
-    let threads = send_transactions(provider.clone(), transactions).await;
+    // Получение газ лимита для клейма
+    let gas_limit = wait_gas(
+        provider.clone(),
+        build_estimate_tx(transaction_info.wallet.address()),
+    )
+    .await;
+
+    // Получение итогового газ лимита
+    let gas_limit = match gas_limit.as_u64() > config.gas_limit {
+        true => gas_limit,
+        false => config.gas_limit.into(),
+    };
+
+    // Создание транзакций для отправки
+    let txs = build_transactions(
+        provider.clone(),
+        &transactions_infos,
+        chain_id.as_u64(),
+        config.gas_bid,
+        gas_limit,
+    )
+    .await;
+
+    // Отправка транзакций
+    let threads = send_transactions(provider.clone(), txs).await;
 
     // Ожидание завершения
     join_all(threads).await;
