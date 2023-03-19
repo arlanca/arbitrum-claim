@@ -8,7 +8,6 @@ use ethers::{
     types::{transaction::eip2718::TypedTransaction, Bytes, TransactionRequest, H160, U256},
 };
 
-
 use crate::{get_nonce_loop, ClaimCall, TransferCall, ARB_ADDRESS, DISTRIBUTOR_ADDRESS};
 
 pub type Transactions = Vec<Bytes>;

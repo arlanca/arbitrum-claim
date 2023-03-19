@@ -45,9 +45,10 @@ pub async fn wait_gas<T: Middleware>(provider: Arc<T>, tx: TypedTransaction) -> 
         let err = {
             let gas_err = gas.unwrap_err();
 
-            let json_rpc_err = gas_err.as_error_response().unwrap();
-
-             json_rpc_err.message.clone()
+            match gas_err.as_error_response() {
+                Some(json_rpc_err) => json_rpc_err.message.clone(),
+                None => gas_err.to_string(),
+            }
         };
 
         warn!("Клейм пока не доступен. Ошибка: {}", err);
@@ -66,14 +67,41 @@ pub async fn get_nonce_loop<T: Middleware>(provider: &Arc<T>, address: Address) 
         let err = {
             let nonce_err = nonce.unwrap_err();
 
-            let json_rpc_err = nonce_err.as_error_response().unwrap();
-
-             json_rpc_err.message.clone()
+            match nonce_err.as_error_response() {
+                Some(json_rpc_err) => json_rpc_err.message.clone(),
+                None => nonce_err.to_string(),
+            }
         };
 
         warn!("Не удалось получить nonce. Ошибка: {}", err);
         sleep(Duration::from_secs_f64(0.1));
     }
+}
+
+async fn send_transaction<T: Middleware + 'static>(provider: Arc<T>, transaction: Bytes) {
+    let tx = provider.send_raw_transaction(transaction).await;
+    if let Err(err) = tx {
+        error!("Не удалось отправить транзакцию: {:?}", err);
+        return;
+    };
+
+    let tx = tx.unwrap().await;
+    if let Err(err) = tx {
+        error!("Транзакция не завершилась успехом: {:?}", err);
+        return;
+    };
+
+    let tx = tx.unwrap();
+    if tx.is_none() {
+        error!("Транзакция не завершилась успехом");
+        return;
+    };
+
+    let tx = tx.unwrap();
+    info!(
+        "Успешно отправил транзакцию от {}. Хэш: {:#x}",
+        tx.from, tx.transaction_hash
+    );
 }
 
 pub async fn send_transactions<T: Middleware + 'static>(
@@ -86,29 +114,7 @@ pub async fn send_transactions<T: Middleware + 'static>(
             let provider = provider.clone();
 
             tokio::spawn(async move {
-                let tx = provider.send_raw_transaction(tx).await;
-                if let Err(err) = tx {
-                    error!("Не удалось отправить транзакцию: {:?}", err);
-                    return;
-                };
-
-                let tx = tx.unwrap().await;
-                if let Err(err) = tx {
-                    error!("Транзакция не завершилась успехом: {:?}", err);
-                    return;
-                };
-
-                let tx = tx.unwrap();
-                if tx.is_none() {
-                    error!("Транзакция не завершилась успехом");
-                    return;
-                };
-
-                let tx = tx.unwrap();
-                info!(
-                    "Успешно отправил транзакцию от {}. Хэш: {:#x}",
-                    tx.from, tx.transaction_hash
-                );
+                send_transaction(provider, tx).await;
             })
         })
         .collect::<Vec<JoinHandle<()>>>()
