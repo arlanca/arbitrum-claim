@@ -1,9 +1,8 @@
-use std::{ops::Add, sync::Arc};
+use std::sync::Arc;
 
 use arbitrum_claim::{
-    build_estimate_tx, build_transactions, get_wallets_with_balances, read_secrets_file,
-    send_transactions, wait_gas, Config, ProviderError, TokenDistributor, TransactionInfo,
-    DISTRIBUTOR_ADDRESS,
+    build_transactions, read_secrets_file, send_transactions, wait_gas, Config, KeyStore,
+    ProviderError, TokenDistributor, DISTRIBUTOR_ADDRESS,
 };
 use ethers::{prelude::*, utils::format_units};
 use futures::future::join_all;
@@ -53,75 +52,57 @@ async fn main() -> Result<(), ProviderError> {
 
     info!("Количество кошельков: {}", wallets.len());
 
-    // Получение кошельков с балансами
-    let wallets_with_balances = get_wallets_with_balances(
-        &TokenDistributor::new(*DISTRIBUTOR_ADDRESS, provider.clone()),
-        &wallets,
-    )
-    .await;
+    let distributor = Arc::new(TokenDistributor::new(
+        *DISTRIBUTOR_ADDRESS,
+        provider.clone(),
+    ));
 
-    // Получение общего баланса
-    let total_balance = wallets_with_balances
-        .iter()
-        .fold(U256::from(0), |total: U256, (_, balance)| {
-            total.add(balance)
-        });
+    let mut keystore = KeyStore::make_keystore(provider.clone(), distributor, wallets, receivers);
+
+    info!("Получаю балансы...");
+    let total_balance = keystore.get_balances().await;
 
     info!("Общий баланс: {}", format_units(total_balance, "ether")?);
 
-    // Создание массива из TransactionInfo
-    let transactions_infos = wallets_with_balances
-        .into_iter()
-        .map(|(wallet, balance)| match receivers.get(&wallet.address()) {
-            Some(&receiver) => TransactionInfo {
-                wallet,
-                balance,
-                receiver,
-            },
-            None => TransactionInfo {
-                wallet,
-                balance,
-                receiver: config.receiver,
-            },
-        })
-        .collect::<Vec<_>>();
+    info!("Получаю nonce...");
+    keystore.fetch_nonces().await;
 
-    // Получение первого элемента из массива TransactionInfo
-    let transaction_info = match transactions_infos.first() {
-        Some(transaction_info) => transaction_info,
+    let mut transactions = build_transactions(
+        &keystore,
+        chain_id.as_u64(),
+        config.gas_limit.into(),
+        config.gas_bid,
+    )
+    .await;
+
+    let estimate_tx = match transactions.first() {
+        Some(estimate_tx) => estimate_tx,
         None => {
             error!("Нет ни одного кошелька для клейма!");
             return Ok(());
         }
     };
 
-    info!("Кошельков с балансом: {}", transactions_infos.len());
+    let gas_limit = wait_gas(provider.clone(), estimate_tx.clone()).await;
 
-    // Получение газ лимита для клейма
-    let gas_limit = wait_gas(
-        provider.clone(),
-        build_estimate_tx(transaction_info.wallet.address()),
-    )
-    .await;
+    if gas_limit > config.gas_limit.into() {
+        transactions.iter_mut().for_each(|tx| {
+            tx.set_gas(gas_limit);
+        });
+    }
 
-    // Получение итогового газ лимита
-    let gas_limit = match gas_limit.as_u64() > config.gas_limit {
-        true => gas_limit,
-        false => config.gas_limit.into(),
-    };
+    let futures = transactions
+        .iter()
+        .map(|tx| async { keystore.sign_transaction(tx).await });
 
-    // Создание транзакций для отправки
-    let txs = build_transactions(
-        provider.clone(),
-        &transactions_infos,
-        chain_id.as_u64(),
-        config.gas_bid,
-        gas_limit,
-    )
-    .await;
+    let raw_transactions = join_all(futures)
+        .await
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
 
     // Отправка транзакций
-    let threads = send_transactions(provider.clone(), txs).await;
+    let threads = send_transactions(provider.clone(), raw_transactions).await;
 
     // Ожидание завершения
     join_all(threads).await;
