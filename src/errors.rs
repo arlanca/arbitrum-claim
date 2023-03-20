@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum WalletError {
     #[error("invalid credentials")]
     InvalidCredentials(#[from] ethers::signers::WalletError),
+    #[error("invalid private key {0}")]
+    InvalidPrivateKey(String),
     #[error("unknown file")]
     UnknownFile(#[from] std::io::Error),
 }

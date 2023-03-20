@@ -5,8 +5,6 @@ use ethers::{
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-use crate::ClaimParams;
-
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("не удалось прочитать файл {0}")]
@@ -14,6 +12,7 @@ pub enum ConfigError {
     #[error("deserialization error: {0}")]
     DeserializationError(#[from] serde_yaml::Error),
 }
+
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -26,6 +25,7 @@ pub struct Config {
     pub gas_bid: U256,
 }
 
+
 impl Config {
     pub fn from_file(path: &str) -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(path)?;
@@ -33,14 +33,6 @@ impl Config {
         let config: Config = serde_yaml::from_str(&content)?;
 
         Ok(config)
-    }
-
-    pub fn claim_params(&self) -> ClaimParams {
-        ClaimParams {
-            receiver: self.receiver,
-            gas_limit: U256::from(self.gas_limit),
-            gas_bid: self.gas_bid,
-        }
     }
 }
 
