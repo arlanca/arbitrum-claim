@@ -15,5 +15,5 @@ pub use errors::*;
 pub use keystore::*;
 pub use tx_builder::build_transactions;
 pub use types::{KeyStore, Receivers, SignWallets, Transactions, UserWallet};
-pub use utils::{get_nonce_loop, get_wallets_with_balances, send_transactions, wait_gas};
+pub use utils::{send_transactions, wait_gas};
 pub use wallets::read_secrets_file;

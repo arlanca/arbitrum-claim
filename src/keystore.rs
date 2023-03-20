@@ -1,16 +1,12 @@
 use ethers::{
     providers::Middleware,
-    types::{transaction::eip2718::TypedTransaction, Bytes, H160, U256},
+    types::{transaction::eip2718::TypedTransaction, Bytes, U256},
 };
 use futures::future::join_all;
 
 use crate::{types::KeyStore, UserWallet};
 
 impl<'a, M: Middleware + 'static> KeyStore<M> {
-    pub fn addresses(&self) -> Vec<H160> {
-        self.wallets.keys().cloned().collect()
-    }
-
     pub fn wallets(&self) -> Vec<&UserWallet<M>> {
         self.wallets.values().collect()
     }

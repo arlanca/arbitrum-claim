@@ -67,6 +67,7 @@ async fn main() -> Result<(), ProviderError> {
     info!("Получаю nonce...");
     keystore.fetch_nonces().await;
 
+    info!("Собираю транзакции...");
     let mut transactions = build_transactions(
         &keystore,
         chain_id.as_u64(),
