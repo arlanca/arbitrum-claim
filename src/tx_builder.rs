@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use ethers::{
     abi::AbiEncode,
@@ -6,21 +6,11 @@ use ethers::{
     providers::Middleware,
     signers::{Signer, Wallet},
     types::{
-        transaction::eip2718::TypedTransaction, Address, Bytes, TransactionRequest, H160, U256,
+        transaction::eip2718::TypedTransaction, Bytes, TransactionRequest, H160, U256,
     },
 };
 
-use crate::{get_nonce_loop, TransferCall, ARB_ADDRESS, CLAIM_DATA, DISTRIBUTOR_ADDRESS};
-
-pub type Transactions = Vec<Bytes>;
-pub type Receivers = HashMap<H160, H160>;
-
-#[derive(Debug)]
-pub struct TransactionInfo {
-    pub wallet: Wallet<SigningKey>,
-    pub balance: U256,
-    pub receiver: Address,
-}
+use crate::{get_nonce_loop, TransferCall, ARB_ADDRESS, CLAIM_DATA, DISTRIBUTOR_ADDRESS, TransactionInfo, Transactions};
 
 async fn sign_transaction(signer: &Wallet<SigningKey>, tx: TypedTransaction) -> Bytes {
     let sig = signer.sign_transaction(&tx).await.unwrap();

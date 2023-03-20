@@ -6,9 +6,7 @@ use ethers::{
     types::H160,
 };
 
-use crate::{tx_builder::Receivers, WalletError};
-
-pub(crate) type Wallets = Vec<Wallet<SigningKey>>;
+use crate::{types::Wallets, WalletError, Receivers};
 
 fn from_mnemonic(raw: &str) -> Result<Wallet<SigningKey>, WalletError> {
     MnemonicBuilder::<English>::default()
