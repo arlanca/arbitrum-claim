@@ -1,4 +1,7 @@
-use ethers::{abi::AbiEncode, types::{H160, Bytes}};
+use ethers::{
+    abi::AbiEncode,
+    types::{Bytes, H160},
+};
 use lazy_static::lazy_static;
 
 use crate::ClaimCall;

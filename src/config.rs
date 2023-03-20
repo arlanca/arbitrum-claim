@@ -13,7 +13,6 @@ pub enum ConfigError {
     DeserializationError(#[from] serde_yaml::Error),
 }
 
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
@@ -24,7 +23,6 @@ pub struct Config {
     #[serde(deserialize_with = "from_float")]
     pub gas_bid: U256,
 }
-
 
 impl Config {
     pub fn from_file(path: &str) -> Result<Self, ConfigError> {

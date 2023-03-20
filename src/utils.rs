@@ -1,39 +1,11 @@
 use std::{sync::Arc, thread::sleep, time::Duration};
 
 use ethers::{
-    prelude::k256::ecdsa::SigningKey,
     providers::{Middleware, MiddlewareError},
-    signers::{Signer, Wallet},
-    types::{transaction::eip2718::TypedTransaction, Address, Bytes, U256},
+    types::{transaction::eip2718::TypedTransaction, Bytes, U256},
 };
-use futures::future::join_all;
 use log::{error, info, warn};
 use tokio::task::JoinHandle;
-
-use crate::TokenDistributor;
-
-pub async fn get_wallets_with_balances<T: Middleware + 'static>(
-    token_distributor: &TokenDistributor<T>,
-    wallets: &[Wallet<SigningKey>],
-) -> Vec<(Wallet<SigningKey>, U256)> {
-    let futures = wallets.iter().map(|wallet| async move {
-        let balance: U256 = match token_distributor.claimable_tokens(wallet.address()).await {
-            Ok(balance) => balance,
-            Err(_) => {
-                warn!("Не удалось получить баланс кошелька: {}", wallet.address());
-                return None;
-            }
-        };
-
-        Some((wallet.clone(), balance))
-    });
-
-    join_all(futures)
-        .await
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-}
 
 pub async fn wait_gas<T: Middleware>(provider: Arc<T>, tx: TypedTransaction) -> U256 {
     loop {
@@ -53,28 +25,6 @@ pub async fn wait_gas<T: Middleware>(provider: Arc<T>, tx: TypedTransaction) -> 
         };
 
         warn!("Клейм пока не доступен. Ошибка: {}", err);
-        sleep(Duration::from_secs_f64(0.1));
-    }
-}
-
-pub async fn get_nonce_loop<T: Middleware>(provider: &Arc<T>, address: Address) -> U256 {
-    loop {
-        let nonce = provider.get_transaction_count(address, None).await;
-
-        if let Ok(nonce) = nonce {
-            return nonce;
-        };
-
-        let err = {
-            let nonce_err = nonce.unwrap_err();
-
-            match nonce_err.as_error_response() {
-                Some(json_rpc_err) => json_rpc_err.message.clone(),
-                None => nonce_err.to_string(),
-            }
-        };
-
-        warn!("Не удалось получить nonce. Ошибка: {}", err);
         sleep(Duration::from_secs_f64(0.1));
     }
 }
@@ -99,10 +49,14 @@ async fn send_transaction<T: Middleware + 'static>(provider: Arc<T>, transaction
     };
 
     let tx = tx.unwrap();
-    info!(
-        "Успешно отправил транзакцию от {}. Хэш: {:#x}",
-        tx.from, tx.transaction_hash
-    );
+    if let Some(status) = tx.status {
+        if status == 1.into() {
+            info!("Транзакция от {} завершилась успехом. Хэш: {:#x}", tx.from, tx.transaction_hash);    
+            return;
+        }
+    }
+    
+    warn!("Транзакция: {:#x} не завершилась успехом", tx.transaction_hash);
 }
 
 pub async fn send_transactions<T: Middleware + 'static>(

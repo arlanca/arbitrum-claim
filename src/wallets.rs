@@ -6,7 +6,7 @@ use ethers::{
     types::H160,
 };
 
-use crate::{types::Wallets, WalletError, Receivers};
+use crate::{types::SignWallets, Receivers, WalletError};
 
 fn from_mnemonic(raw: &str) -> Result<Wallet<SigningKey>, WalletError> {
     MnemonicBuilder::<English>::default()
@@ -23,7 +23,7 @@ fn from_private(raw: &str) -> Result<Wallet<SigningKey>, WalletError> {
 pub fn read_secrets_file(
     path: &str,
     default_receiver: H160,
-) -> Result<(Wallets, Receivers), WalletError> {
+) -> Result<(SignWallets, Receivers), WalletError> {
     let content = std::fs::read_to_string(path)?;
     let mut receivers = Receivers::new();
 
